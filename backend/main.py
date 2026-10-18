@@ -42,9 +42,9 @@ VLC_PATH = next((p for p in VLC_CANDIDATES if p and os.path.exists(p)), None)
 
 
 def download_torrserver(dest_path: str) -> bool:
-    """Автоматически скачивает официальный TorrServer если он отсутствует на компьютере."""
+    """Автоматически скачивает официальный 64-битный TorrServer если он отсутствует на компьютере."""
     url = (
-        "https://github.com/YouROK/TorrServer/releases/latest/download/TorrServer-windows-386.exe"
+        "https://github.com/YouROK/TorrServer/releases/latest/download/TorrServer-windows-amd64.exe"
         if os.name == 'nt'
         else "https://github.com/YouROK/TorrServer/releases/latest/download/TorrServer-linux-amd64"
     )
@@ -67,13 +67,18 @@ def download_torrserver(dest_path: str) -> bool:
 
 
 def get_torrserver_executable() -> Optional[str]:
-    """Находит бинарный файл TorrServer на Windows или Linux."""
+    """Находит бинарный файл TorrServer на Windows или Linux (предпочитая 64-битную версию)."""
     if os.name == 'nt':
         candidates = [
+            os.path.join(APP_DIR, "TorrServer-windows-amd64.exe"),
+            os.path.join(PROJECT_ROOT, "TorrServer-windows-amd64.exe"),
+            os.path.join(PROJECT_ROOT, "..", "soft", "TorrServer-windows-amd64.exe"),
+            os.path.join(PROJECT_ROOT, "soft", "TorrServer-windows-amd64.exe"),
+            shutil.which("TorrServer-windows-amd64.exe"),
             os.path.abspath(TORRSERVER_EXE),
+            os.path.join(APP_DIR, "TorrServer-windows-386.exe"),
             os.path.join(PROJECT_ROOT, "TorrServer-windows-386.exe"),
             os.path.join(PROJECT_ROOT, "soft", "TorrServer-windows-386.exe"),
-            os.path.join(APP_DIR, "TorrServer-windows-386.exe"),
             shutil.which("TorrServer-windows-386.exe"),
             shutil.which("torrserver.exe"),
             shutil.which("torrserver")
@@ -91,9 +96,9 @@ def get_torrserver_executable() -> Optional[str]:
         if c and os.path.exists(c):
             return c
 
-    # Если бинарник не найден на компьютере — скачиваем его автоматически
+    # Если бинарник не найден на компьютере — скачиваем 64-битный
     auto_dest = (
-        os.path.join(APP_DIR, "TorrServer-windows-386.exe")
+        os.path.join(APP_DIR, "TorrServer-windows-amd64.exe")
         if os.name == 'nt'
         else os.path.join(APP_DIR, "torrserver")
     )
