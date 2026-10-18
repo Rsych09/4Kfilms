@@ -226,13 +226,26 @@ async function searchMovie() {
 
 // ─── Торренты ────────────────────────────────────────────────────────────────
 
+function searchModalTorrents() {
+    const input = document.getElementById('torrentSearchInput');
+    if (!input) return;
+    const q = input.value.trim();
+    if (q) {
+        fetchTorrents(q);
+    }
+}
+
 async function fetchTorrents(title) {
     const grid   = document.getElementById('resultsGrid');
     const status = document.getElementById('statusMessage');
+    const searchInput = document.getElementById('torrentSearchInput');
+    if (searchInput) {
+        searchInput.value = title;
+    }
 
     grid.innerHTML       = '';
     status.style.display = 'block';
-    status.textContent   = '🔍 Поиск раздач на трекерах...';
+    status.innerHTML     = '🔍 Поиск раздач на трекерах...';
 
     try {
         const response = await fetch(`${BACKEND_URL}/search?title=${encodeURIComponent(title)}`);
@@ -240,7 +253,15 @@ async function fetchTorrents(title) {
         const torrents = await response.json();
 
         if (!Array.isArray(torrents) || torrents.length === 0) {
-            status.textContent = '✗ Раздач не найдено. Попробуйте изменить название фильма.';
+            status.style.display = 'block';
+            status.innerHTML = `
+                <div style="padding:10px 0;">
+                    <div style="margin-bottom:6px; color:var(--text); font-weight:600;">✗ Раздач не найдено по запросу: «${escapeHtml(title)}»</div>
+                    <div style="font-size:12px; color:var(--muted); line-height:1.5;">
+                        Попробуйте отредактировать поисковый запрос в поле выше (например, стереть подзаголовок или ввести оригинальное название).
+                    </div>
+                </div>
+            `;
             return;
         }
 
@@ -272,7 +293,7 @@ async function fetchTorrents(title) {
 
     } catch (err) {
         status.style.display = 'block';
-        status.textContent   = '⚠ Бэкенд не отвечает. Убедитесь, что запущен start.bat';
+        status.textContent   = '⚠ Ошибка получения раздач. Проверьте соединение с сервером.';
         console.error(err);
     }
 }

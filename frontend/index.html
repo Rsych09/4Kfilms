@@ -170,7 +170,13 @@
             <div class="modal-divider" style="margin-top:0;"></div>
 
             <div class="torrents-container">
-                <h3>Выберите раздачу</h3>
+                <div class="torrents-header-row">
+                    <h3>Выберите раздачу</h3>
+                    <div class="modal-search-box">
+                        <input type="text" id="torrentSearchInput" placeholder="Поиск раздач..." onkeypress="if(event.key==='Enter') searchModalTorrents()">
+                        <button onclick="searchModalTorrents()">Искать</button>
+                    </div>
+                </div>
                 <p class="torrents-hint">
                     <strong style="color:var(--text);font-weight:600;">Смотреть</strong> — воспроизведение в браузере
                     &nbsp;·&nbsp;

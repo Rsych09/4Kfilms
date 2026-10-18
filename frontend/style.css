@@ -617,12 +617,59 @@ body::before {
 /* ─── Torrents ──────────────────────────────────────────────────────────────── */
 .torrents-container { padding: 0 32px 0; }
 
+.torrents-header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+    margin-bottom: 8px;
+}
+
 .torrents-container h3 {
     font-family: var(--font-title);
     font-size: 18px;
     letter-spacing: 2px;
     color: var(--text);
-    margin-bottom: 6px;
+    margin: 0;
+}
+
+.modal-search-box {
+    display: flex;
+    align-items: center;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 4px 6px 4px 12px;
+    gap: 8px;
+    width: 100%;
+    max-width: 420px;
+}
+
+.modal-search-box input {
+    background: transparent;
+    border: none;
+    color: var(--text);
+    font-size: 13px;
+    outline: none;
+    width: 100%;
+}
+
+.modal-search-box button {
+    background: var(--red);
+    color: #fff;
+    border: none;
+    padding: 6px 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 600;
+    transition: background 0.15s;
+    white-space: nowrap;
+}
+
+.modal-search-box button:hover {
+    background: #ff1f2d;
 }
 
 .torrents-hint {

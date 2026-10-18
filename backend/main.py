@@ -297,6 +297,11 @@ def parse_size_to_gb(val: Any) -> float:
     return 0.0
 
 
+def clean_search_query(s: str) -> str:
+    cleaned = re.sub(r'[:._\-–—()]+', ' ', s)
+    return ' '.join(cleaned.split())
+
+
 def query_torrserver_rutor(search_string: str) -> List[Dict[str, Any]]:
     """Ищет торренты через встроенный движок поиска RuTor в TorrServer."""
     try:
@@ -305,7 +310,14 @@ def query_torrserver_rutor(search_string: str) -> List[Dict[str, Any]]:
         if r.status_code == 200:
             return r.json()
     except Exception as e:
-        print(f"[TORRSERVER-SEARCH] Ошибка: {e}")
+        print(f"[TORRSERVER-SEARCH] Ошибка для '{search_string}': {e}")
+        try:
+            if ensure_torrserver_running():
+                r = requests.get(f"{TORRSERVER_URL}/search", params={"query": search_string}, timeout=6)
+                if r.status_code == 200:
+                    return r.json()
+        except Exception:
+            pass
     return []
 
 
@@ -386,38 +398,76 @@ def get_system_status():
 @app.get("/search")
 def search_movie_torrents(title: str = Query(...)):
     print(f"\n[SEARCH] Запрос: '{title}'")
-    en_title = None
+    raw = []
+    queries_to_try = []
 
-    # TMDB: поиск оригинального английского названия
+    title_clean = title.strip()
+    if title_clean:
+        queries_to_try.append(title_clean)
+
+    # 1. Запрос с очищенной пунктуацией (например, без двоеточий, дефисов и точек)
+    p_clean = clean_search_query(title_clean)
+    if p_clean and p_clean.lower() != title_clean.lower() and p_clean not in queries_to_try:
+        queries_to_try.append(p_clean)
+
+    # 2. Основная часть названия до знака ':', '—', '–', '-', '.'
+    for sep in [':', '—', '–', '-', '.']:
+        if sep in title_clean:
+            head = title_clean.split(sep)[0].strip()
+            if len(head) >= 3 and head.lower() not in [q.lower() for q in queries_to_try]:
+                queries_to_try.append(head)
+            break
+
+    # 3. Оригинальное / английское название из TMDB
+    en_title = None
     try:
         res = requests.get(
             "https://api.themoviedb.org/3/search/movie",
-            params={"api_key": TMDB_API_KEY, "query": title, "language": "ru"},
-            timeout=5,
+            params={"api_key": TMDB_API_KEY, "query": title_clean, "language": "ru"},
+            timeout=4,
         )
         if res.status_code == 200:
             results = res.json().get("results", [])
             if results:
-                en_title = results[0].get("original_title")
+                orig = results[0].get("original_title") or results[0].get("title")
+                if orig and orig.lower() != title_clean.lower():
+                    en_title = orig.strip()
     except Exception as e:
         print(f"[TMDB] Ошибка: {e}")
 
-    # 1. Поиск в TorrServer (встроенный RuTor)
-    raw = query_torrserver_rutor(title)
+    if en_title and en_title.lower() not in [q.lower() for q in queries_to_try]:
+        queries_to_try.append(en_title)
+        en_p_clean = clean_search_query(en_title)
+        if en_p_clean and en_p_clean.lower() not in [q.lower() for q in queries_to_try]:
+            queries_to_try.append(en_p_clean)
+        for sep in [':', '—', '–', '-', '.']:
+            if sep in en_title:
+                en_head = en_title.split(sep)[0].strip()
+                if len(en_head) >= 3 and en_head.lower() not in [q.lower() for q in queries_to_try]:
+                    queries_to_try.append(en_head)
+                break
 
-    # 2. Если мало результатов и есть английское название — ищем и по нему
-    if len(raw) < 5 and en_title and en_title.lower() != title.lower():
-        en_raw = query_torrserver_rutor(en_title)
-        raw.extend(en_raw)
+    print(f"[SEARCH] Варианты запроса: {queries_to_try}")
 
-    # 3. Если TorrServer ничего не вернул — пробуем резервный поиск в rutor.info
-    if len(raw) == 0:
-        raw = query_rutor_direct(title)
-        if len(raw) < 3 and en_title and en_title.lower() != title.lower():
-            raw.extend(query_rutor_direct(en_title))
+    # Поиск через встроенный RuTor в TorrServer
+    for q in queries_to_try:
+        found = query_torrserver_rutor(q)
+        if found:
+            raw.extend(found)
+        if len(raw) >= 20:
+            break
 
-    # 4. Проверяем Jackett если доступен
-    jackett_raw = query_jackett(title)
+    # Если ничего или мало найдено — резервный поиск в rutor.info
+    if len(raw) < 5:
+        for q in queries_to_try[:2]:
+            direct = query_rutor_direct(q)
+            if direct:
+                raw.extend(direct)
+            if len(raw) >= 15:
+                break
+
+    # Jackett если включен
+    jackett_raw = query_jackett(title_clean)
     if jackett_raw:
         raw.extend(jackett_raw)
 
@@ -425,28 +475,32 @@ def search_movie_torrents(title: str = Query(...)):
     seen = set()
 
     for item in raw:
-        # Извлекаем magnet ссылку
         link = item.get("Magnet") or item.get("MagnetUri") or item.get("Link") or ""
+        hash_val = item.get("Hash") or ""
+
+        # Если magnet нет, но есть Hash — генерируем ссылку
+        if not link and hash_val:
+            title_text = item.get("Title") or item.get("title") or "movie"
+            link = f"magnet:?xt=urn:btih:{hash_val}&dn={urllib.parse.quote(title_text)}&tr=udp://opentor.net:6969&tr=http://retracker.local/announce"
+
         if not link:
             continue
 
-        # Извлекаем хэш для дедупликации
         h_m = re.search(r'xt=urn:btih:([a-zA-Z0-9]+)', link)
-        unique_key = h_m.group(1).lower() if h_m else link
+        unique_key = h_m.group(1).lower() if h_m else (hash_val.lower() if hash_val else link)
         if unique_key in seen:
             continue
 
-        # Извлекаем количество сидов
-        seeders = item.get("Seed")
-        if seeders is None:
-            seeders = item.get("Seeders") or item.get("seeders") or 0
+        seed_raw = item.get("Seed")
+        if seed_raw is None:
+            seed_raw = item.get("Seeders") or item.get("seeders") or 0
+        try:
+            seeders = int(seed_raw)
+        except (ValueError, TypeError):
+            seeders = 0
 
-        # Нормализуем размер
         size_gb = parse_size_to_gb(item.get("Size", 0))
-        if size_gb <= 0:
-            continue
 
-        # Формируем чистую magnet-ссылку
         magnet = urllib.parse.unquote(link) if ("%3A" in link or "%3a" in link) else link
         title_str = item.get("Title") or item.get("title") or ""
 
@@ -458,8 +512,8 @@ def search_movie_torrents(title: str = Query(...)):
         })
         seen.add(unique_key)
 
-    result = sorted(parsed, key=lambda x: x["seeders"], reverse=True)[:35]
-    print(f"[SEARCH] Найдено раздач: {len(result)}")
+    result = sorted(parsed, key=lambda x: x["seeders"], reverse=True)[:40]
+    print(f"[SEARCH] Итого найдено раздач: {len(result)}")
     return result
 
 
