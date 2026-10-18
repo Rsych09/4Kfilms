@@ -725,13 +725,23 @@ if os.path.exists(FRONTEND_DIR):
 
 if __name__ == "__main__":
     import uvicorn
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    if current_dir not in sys.path:
-        sys.path.insert(0, current_dir)
-    os.chdir(current_dir)
-    host = os.environ.get("HOST", "0.0.0.0")
-    ips = get_all_local_ips()
-    primary_ip = ips[0]
-    print(f"[PersonalCinema 4K] Сервер запущен: http://127.0.0.1:{port}")
-    print(f"[PersonalCinema 4K] 📱 Доступ с телефона в домашней сети: http://{primary_ip}:{port}")
-    uvicorn.run(app, host=host, port=port)
+    try:
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        if current_dir not in sys.path:
+            sys.path.insert(0, current_dir)
+        os.chdir(current_dir)
+        host = os.environ.get("HOST", "0.0.0.0")
+        port = int(os.environ.get("PORT", 8080))
+        ips = get_all_local_ips()
+        primary_ip = ips[0] if ips else "127.0.0.1"
+        print("=" * 60)
+        print(" [PersonalCinema 4K] Сервер успешно запущен!")
+        print(f" Компьютер:       http://127.0.0.1:{port}")
+        print(f" Телефон/Планшет: http://{primary_ip}:{port}")
+        print("=" * 60)
+        uvicorn.run(app, host=host, port=port)
+    except Exception as e:
+        print(f"\n[FATAL ERROR] Ошибка запуска сервера: {e}")
+        import traceback
+        traceback.print_exc()
+        input("\nНажмите Enter для выхода...")
