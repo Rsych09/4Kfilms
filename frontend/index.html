@@ -134,8 +134,8 @@
                             <!-- Левые кнопки -->
                             <div class="controls-left">
                                 <button class="ctrl-btn" id="btnPlayPause">▶</button>
-                                <button class="ctrl-btn" id="btnSkipBack"  onclick="document.getElementById('player').currentTime -= 10" title="-10с">⏪</button>
-                                <button class="ctrl-btn" id="btnSkipFwd"   onclick="document.getElementById('player').currentTime += 10" title="+10с">⏩</button>
+                                <button class="ctrl-btn" id="btnSkipBack"  onclick="skipRelative(-10)" title="-10с">⏪</button>
+                                <button class="ctrl-btn" id="btnSkipFwd"   onclick="skipRelative(10)" title="+10с">⏩</button>
                                 <div class="volume-group">
                                     <button class="ctrl-btn" id="btnVolume">🔊</button>
                                     <input type="range" id="volumeSlider" class="volume-slider" min="0" max="1" step="0.05" value="1">

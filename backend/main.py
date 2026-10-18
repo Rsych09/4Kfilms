@@ -519,21 +519,26 @@ def stream_proxy(request: Request, magnet: str = Query(...), index: int = 1):
     )
 
 
+# Find FFmpeg and FFprobe binaries
+FFMPEG_BIN = next((p for p in [shutil.which("ffmpeg"), os.path.join(APP_DIR, "ffmpeg.exe"), r"C:\ffmpeg\bin\ffmpeg.exe", r"C:\ffmpeg\ffmpeg.exe"] if p and os.path.exists(p)), "ffmpeg")
+FFPROBE_BIN = next((p for p in [shutil.which("ffprobe"), os.path.join(APP_DIR, "ffprobe.exe"), r"C:\ffmpeg\bin\ffprobe.exe", r"C:\ffmpeg\ffprobe.exe"] if p and os.path.exists(p)), "ffprobe")
+
+
 @app.get("/audio-tracks")
 def get_audio_tracks(magnet: str = Query(...), index: int = 1):
-    """Возвращает список звуковых дорожек торрента для выбора в плеере."""
+    """Возвращает список звуковых дорожек торрента и полную длительность для плеера."""
     pure_magnet = urllib.parse.unquote(magnet)
     source_url = f"{TORRSERVER_URL}/stream/?link={urllib.parse.quote(pure_magnet)}&index={index}&play"
 
     cmd = [
-        "ffprobe",
+        FFPROBE_BIN,
         "-v", "error",
-        "-show_entries", "stream=index,codec_name,codec_type,channels:stream_tags=language,title",
+        "-show_entries", "stream=index,codec_name,codec_type,channels,duration:stream_tags=language,title:format=duration",
         "-of", "json",
         source_url
     ]
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=6)
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=8)
         if proc.returncode == 0:
             data = json.loads(proc.stdout)
             audio_streams = []
@@ -560,10 +565,30 @@ def get_audio_tracks(magnet: str = Query(...), index: int = 1):
                         "lang": lang
                     })
                     audio_idx += 1
-            return {"tracks": audio_streams}
+
+            # Извлекаем полную длительность фильма в секундах
+            duration = 0.0
+            fmt_dur = data.get("format", {}).get("duration")
+            if fmt_dur:
+                try:
+                    duration = float(fmt_dur)
+                except Exception:
+                    pass
+            if duration <= 0:
+                for s in data.get("streams", []):
+                    s_dur = s.get("duration")
+                    if s_dur:
+                        try:
+                            d = float(s_dur)
+                            if d > duration:
+                                duration = d
+                        except Exception:
+                            pass
+
+            return {"tracks": audio_streams, "duration": round(duration, 2)}
     except Exception as e:
         print(f"[AUDIO-TRACKS] Ошибка: {e}")
-    return {"tracks": []}
+    return {"tracks": [], "duration": 0}
 
 
 @app.get("/stream-live")
@@ -576,11 +601,12 @@ def stream_live(
     """
     Транскодирует несовместимый звук (AC3/EAC3/DTS) в AAC на лету через ffmpeg.
     Видео поток копируется без пережатия (-c:v copy) с нулевой нагрузкой на CPU.
+    Поддерживает перемотку на любой таймкод через параметр ss (в секундах).
     """
     pure_magnet = urllib.parse.unquote(magnet)
     source_url = f"{TORRSERVER_URL}/stream/?link={urllib.parse.quote(pure_magnet)}&index={index}&play"
 
-    cmd = ["ffmpeg", "-nostdin", "-loglevel", "warning"]
+    cmd = [FFMPEG_BIN, "-nostdin", "-loglevel", "warning"]
 
     if ss > 0:
         cmd.extend(["-ss", str(ss)])
@@ -596,6 +622,8 @@ def stream_live(
         "-c:a", "aac",
         "-b:a", "192k",
         "-ac", "2",
+        "-avoid_negative_ts", "make_zero",
+        "-strict", "unofficial",
         "-f", "mp4",
         "-movflags", "frag_keyframe+empty_moov+default_base_moof",
         "pipe:1"
