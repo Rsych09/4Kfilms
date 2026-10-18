@@ -15,8 +15,15 @@ from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 import requests
 
-PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-FRONTEND_DIR = os.path.join(PROJECT_ROOT, "frontend")
+if getattr(sys, 'frozen', False):
+    BUNDLE_DIR = sys._MEIPASS
+    APP_DIR = os.path.dirname(sys.executable)
+else:
+    BUNDLE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    APP_DIR = BUNDLE_DIR
+
+PROJECT_ROOT = APP_DIR
+FRONTEND_DIR = os.path.join(BUNDLE_DIR, "frontend")
 TORRSERVER_EXE = os.environ.get("TORRSERVER_EXE", os.path.join(PROJECT_ROOT, "..", "soft", "TorrServer-windows-386.exe"))
 TORRSERVER_DIR = os.environ.get("TORRSERVER_DIR", os.path.abspath(os.path.join(PROJECT_ROOT, "..", "soft")))
 
@@ -34,12 +41,39 @@ VLC_CANDIDATES = [
 VLC_PATH = next((p for p in VLC_CANDIDATES if p and os.path.exists(p)), None)
 
 
+def download_torrserver(dest_path: str) -> bool:
+    """Автоматически скачивает официальный TorrServer если он отсутствует на компьютере."""
+    url = (
+        "https://github.com/YouROK/TorrServer/releases/latest/download/TorrServer-windows-386.exe"
+        if os.name == 'nt'
+        else "https://github.com/YouROK/TorrServer/releases/latest/download/TorrServer-linux-amd64"
+    )
+    print(f"[TorrServer] Загрузка TorrServer с {url}...")
+    try:
+        os.makedirs(os.path.dirname(os.path.abspath(dest_path)), exist_ok=True)
+        r = requests.get(url, stream=True, timeout=40)
+        if r.status_code == 200:
+            with open(dest_path, "wb") as f:
+                for chunk in r.iter_content(chunk_size=1024 * 1024):
+                    if chunk:
+                        f.write(chunk)
+            if os.name != 'nt':
+                os.chmod(dest_path, 0o755)
+            print(f"[TorrServer] Успешно загружен в {dest_path}")
+            return True
+    except Exception as e:
+        print(f"[TorrServer] Ошибка загрузки: {e}")
+    return False
+
+
 def get_torrserver_executable() -> Optional[str]:
     """Находит бинарный файл TorrServer на Windows или Linux."""
     if os.name == 'nt':
         candidates = [
             os.path.abspath(TORRSERVER_EXE),
             os.path.join(PROJECT_ROOT, "TorrServer-windows-386.exe"),
+            os.path.join(PROJECT_ROOT, "soft", "TorrServer-windows-386.exe"),
+            os.path.join(APP_DIR, "TorrServer-windows-386.exe"),
             shutil.which("TorrServer-windows-386.exe"),
             shutil.which("torrserver.exe"),
             shutil.which("torrserver")
@@ -56,6 +90,16 @@ def get_torrserver_executable() -> Optional[str]:
     for c in candidates:
         if c and os.path.exists(c):
             return c
+
+    # Если бинарник не найден на компьютере — скачиваем его автоматически
+    auto_dest = (
+        os.path.join(APP_DIR, "TorrServer-windows-386.exe")
+        if os.name == 'nt'
+        else os.path.join(APP_DIR, "torrserver")
+    )
+    if download_torrserver(auto_dest):
+        return auto_dest
+
     return None
 
 
@@ -118,15 +162,35 @@ def enable_torrserver_rutor():
 
 
 def open_browser_delayed():
-    if os.environ.get("RENDER") or os.environ.get("DOCKER") or os.name != 'nt':
+    if os.name != 'nt':
         return
     time.sleep(1.2)
+    port = int(os.environ.get("PORT", 8080))
+    app_url = f"http://127.0.0.1:{port}"
+
+    edge_paths = [
+        r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+        r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
+        shutil.which("msedge")
+    ]
+    chrome_paths = [
+        r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+        r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+        shutil.which("chrome")
+    ]
+    browser_exe = next((p for p in edge_paths + chrome_paths if p and os.path.exists(p)), None)
+    if browser_exe:
+        try:
+            subprocess.Popen([browser_exe, f"--app={app_url}"])
+            return
+        except Exception:
+            pass
+
     try:
         import webbrowser
-        port = int(os.environ.get("PORT", 8080))
-        webbrowser.open(f"http://127.0.0.1:{port}")
+        webbrowser.open(app_url)
     except Exception as e:
-        print(f"[Browser] Ошибка открытия браузера: {e}")
+        print(f"[Browser] Ошибка открытия окна: {e}")
 
 
 @asynccontextmanager
@@ -581,4 +645,4 @@ if __name__ == "__main__":
     host = os.environ.get("HOST", "0.0.0.0")
     port = int(os.environ.get("PORT", 8080))
     print(f"[PersonalCinema 4K] Сервер запускается на http://{host}:{port}")
-    uvicorn.run("main:app", host=host, port=port)
+    uvicorn.run(app, host=host, port=port)

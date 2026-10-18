@@ -26,3 +26,8 @@ Thumbs.db
 # Scratch scripts & temp files
 scratch/
 *.tmp
+
+# PyInstaller build artifacts
+build/
+dist/
+*.spec
