@@ -655,9 +655,35 @@ function initCustomControls(video) {
     const volumeIcon    = document.getElementById('btnVolume');
     const fullscreenBtn = document.getElementById('btnFullscreen');
 
-    playPauseBtn.onclick = () => video.paused ? video.play() : video.pause();
-    video.onpause = () => { playPauseBtn.textContent = '▶'; };
-    video.onplay  = () => { playPauseBtn.textContent = '❚❚'; };
+    const hideControls = () => {
+        if (playerState.isDragging || video.paused) return;
+        controls.classList.add('hidden');
+        wrapper.classList.add('cursor-hidden');
+    };
+
+    const showControls = (autoHide = true) => {
+        controls.classList.remove('hidden');
+        wrapper.classList.remove('cursor-hidden');
+        clearTimeout(playerState.hideControlsTimer);
+        if (autoHide && !video.paused && !playerState.isDragging) {
+            playerState.hideControlsTimer = setTimeout(hideControls, 3000);
+        }
+    };
+
+    playPauseBtn.onclick = (e) => {
+        e.stopPropagation();
+        video.paused ? video.play() : video.pause();
+    };
+
+    video.onpause = () => {
+        playPauseBtn.textContent = '▶';
+        showControls(false);
+    };
+
+    video.onplay = () => {
+        playPauseBtn.textContent = '❚❚';
+        showControls(true);
+    };
 
     video.ontimeupdate = () => {
         if (playerState.isDragging) return;
@@ -724,77 +750,68 @@ function initCustomControls(video) {
         if (playerState.isDragging) {
             playerState.isDragging = false;
             commitSeek(seekDragTime, video);
+            showControls(true);
         }
     });
     document.addEventListener('touchend', (e) => {
         if (playerState.isDragging) {
             playerState.isDragging = false;
             commitSeek(seekDragTime, video);
+            showControls(true);
         }
     });
 
     progress.onclick = (e) => {
+        e.stopPropagation();
         handleSeekEvent(e, true);
+        showControls(true);
     };
 
-    volumeSlider.oninput = () => {
+    volumeSlider.oninput = (e) => {
+        e.stopPropagation();
         video.volume = parseFloat(volumeSlider.value);
         video.muted  = video.volume === 0;
         updateVolumeIcon(video, volumeIcon);
+        showControls(true);
     };
-    volumeIcon.onclick = () => {
+    volumeIcon.onclick = (e) => {
+        e.stopPropagation();
         video.muted = !video.muted;
         volumeSlider.value = video.muted ? 0 : video.volume;
         updateVolumeIcon(video, volumeIcon);
+        showControls(true);
     };
 
-    const showControls = () => {
-        controls.style.opacity = '1';
-        controls.style.pointerEvents = 'auto';
-        wrapper.style.cursor   = 'default';
-        clearTimeout(playerState.hideControlsTimer);
-        if (!video.paused) {
-            playerState.hideControlsTimer = setTimeout(() => {
-                if (playerState.isDragging || controls.matches(':hover')) return;
-                controls.style.opacity = '0';
-                controls.style.pointerEvents = 'none';
-                wrapper.style.cursor   = 'none';
-            }, 3000);
-        }
-    };
+    // Движение мыши или касание экрана показывает контролы и запускает таймер скрытия
+    wrapper.addEventListener('mousemove', () => showControls(true));
+    wrapper.addEventListener('mouseenter', () => showControls(true));
+    wrapper.addEventListener('touchstart', () => showControls(true), { passive: true });
 
-    wrapper.addEventListener('mousemove', showControls);
-    wrapper.addEventListener('mouseenter', showControls);
-    wrapper.addEventListener('touchstart', showControls, { passive: true });
-
-    // В полноэкранном режиме мышь может двигаться по любому месту экрана
-    document.addEventListener('mousemove', (e) => {
+    document.addEventListener('mousemove', () => {
         if (document.fullscreenElement) {
-            showControls();
+            showControls(true);
         }
     });
 
-    controls.addEventListener('mouseenter', () => {
-        clearTimeout(playerState.hideControlsTimer);
-        controls.style.opacity = '1';
-        controls.style.pointerEvents = 'auto';
+    // Клик по панели контролов не должен всплывать до клика по видео
+    controls.addEventListener('click', (e) => {
+        e.stopPropagation();
+        showControls(true);
     });
-    controls.addEventListener('mouseleave', () => {
-        if (!video.paused && !playerState.isDragging) {
-            playerState.hideControlsTimer = setTimeout(() => {
-                controls.style.opacity = '0';
-                controls.style.pointerEvents = 'none';
-                wrapper.style.cursor   = 'none';
-            }, 2000);
-        }
-    });
+    controls.addEventListener('touchstart', () => {
+        showControls(true);
+    }, { passive: true });
 
-    fullscreenBtn.onclick = () => toggleFullscreen(wrapper, fullscreenBtn);
+    fullscreenBtn.onclick = (e) => {
+        e.stopPropagation();
+        toggleFullscreen(wrapper, fullscreenBtn);
+    };
+
     document.onfullscreenchange = () => {
         const isFs = !!document.fullscreenElement;
         fullscreenBtn.textContent = isFs ? '⊡' : '⛶';
         wrapper.classList.toggle('fullscreen-mode', isFs);
-        showControls();
+        showControls(true);
     };
 
     document.onkeydown = (e) => {
@@ -817,14 +834,22 @@ function initCustomControls(video) {
     };
 
     video.onclick = () => {
-        if (controls.style.opacity === '0') {
-            showControls();
+        if (controls.classList.contains('hidden')) {
+            showControls(true);
         } else {
-            video.paused ? video.play() : video.pause();
+            const isTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+            if (isTouch) {
+                hideControls();
+            } else {
+                video.paused ? video.play() : video.pause();
+            }
         }
     };
 
     video.ondblclick = () => toggleFullscreen(wrapper, fullscreenBtn);
+
+    // Первоначальный показ с автоскрытием через 3 секунды
+    showControls(true);
 }
 
 function toggleFullscreen(wrapper, btn) {

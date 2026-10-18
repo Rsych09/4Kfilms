@@ -671,13 +671,14 @@ body::before {
 .torrent-info { flex: 1; min-width: 0; }
 
 .torrent-title {
-    font-size: 13px;
-    font-weight: 400;
+    font-size: 13.5px;
+    font-weight: 500;
     margin-bottom: 6px;
     color: var(--text);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    white-space: normal;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    line-height: 1.4;
     letter-spacing: 0.2px;
 }
 
@@ -843,8 +844,20 @@ body::before {
     background: linear-gradient(to top, rgba(0,0,0,0.92) 0%, rgba(0,0,0,0.5) 60%, transparent 100%);
     padding: 32px 16px 12px;
     opacity: 1;
-    transition: opacity 0.3s;
+    pointer-events: auto;
+    transition: opacity 0.35s ease, transform 0.35s ease, visibility 0.35s ease;
     z-index: 10;
+}
+
+.custom-controls.hidden {
+    opacity: 0 !important;
+    pointer-events: none !important;
+    transform: translateY(16px) !important;
+    visibility: hidden !important;
+}
+
+.video-wrapper.cursor-hidden {
+    cursor: none !important;
 }
 
 /* Полноэкранный режим плеера */
@@ -892,6 +905,16 @@ body::before {
     padding: 60px 32px 24px !important;
     background: linear-gradient(to top, rgba(0,0,0,0.96) 0%, rgba(0,0,0,0.7) 60%, transparent 100%) !important;
     z-index: 2147483647 !important;
+    transition: opacity 0.35s ease, transform 0.35s ease, visibility 0.35s ease !important;
+}
+
+.video-wrapper:fullscreen .custom-controls.hidden,
+.video-wrapper:-webkit-full-screen .custom-controls.hidden,
+.video-wrapper.fullscreen-mode .custom-controls.hidden {
+    opacity: 0 !important;
+    pointer-events: none !important;
+    transform: translateY(24px) !important;
+    visibility: hidden !important;
 }
 
 .video-wrapper:fullscreen .progress-bar,
@@ -1447,10 +1470,21 @@ video { outline: none; }
         gap: 10px;
     }
     .torrent-card {
-        padding: 12px;
+        padding: 14px;
         flex-direction: column;
-        align-items: flex-start;
-        gap: 8px;
+        align-items: stretch;
+        gap: 10px;
+    }
+    .torrent-info {
+        width: 100%;
+    }
+    .torrent-title {
+        font-size: 13.5px !important;
+        white-space: normal !important;
+        word-break: break-word !important;
+        overflow-wrap: anywhere !important;
+        line-height: 1.45 !important;
+        margin-bottom: 8px !important;
     }
     .torrent-actions {
         width: 100%;
