@@ -723,27 +723,52 @@ function initCustomControls(video) {
         updateVolumeIcon(video, volumeIcon);
     };
 
-    fullscreenBtn.onclick = () => toggleFullscreen(wrapper, fullscreenBtn);
-    document.onfullscreenchange = () => {
-        fullscreenBtn.textContent = document.fullscreenElement ? '⊡' : '⛶';
-    };
-
-    wrapper.onmousemove = () => {
+    const showControls = () => {
         controls.style.opacity = '1';
+        controls.style.pointerEvents = 'auto';
         wrapper.style.cursor   = 'default';
         clearTimeout(playerState.hideControlsTimer);
         if (!video.paused) {
             playerState.hideControlsTimer = setTimeout(() => {
+                if (playerState.isDragging || controls.matches(':hover')) return;
                 controls.style.opacity = '0';
+                controls.style.pointerEvents = 'none';
                 wrapper.style.cursor   = 'none';
             }, 3000);
         }
     };
-    wrapper.onmouseleave = () => {
-        if (!video.paused) {
-            controls.style.opacity = '0';
-            wrapper.style.cursor   = 'none';
+
+    wrapper.addEventListener('mousemove', showControls);
+    wrapper.addEventListener('mouseenter', showControls);
+
+    // В полноэкранном режиме мышь может двигаться по любому месту экрана
+    document.addEventListener('mousemove', (e) => {
+        if (document.fullscreenElement) {
+            showControls();
         }
+    });
+
+    controls.addEventListener('mouseenter', () => {
+        clearTimeout(playerState.hideControlsTimer);
+        controls.style.opacity = '1';
+        controls.style.pointerEvents = 'auto';
+    });
+    controls.addEventListener('mouseleave', () => {
+        if (!video.paused && !playerState.isDragging) {
+            playerState.hideControlsTimer = setTimeout(() => {
+                controls.style.opacity = '0';
+                controls.style.pointerEvents = 'none';
+                wrapper.style.cursor   = 'none';
+            }, 2000);
+        }
+    });
+
+    fullscreenBtn.onclick = () => toggleFullscreen(wrapper, fullscreenBtn);
+    document.onfullscreenchange = () => {
+        const isFs = !!document.fullscreenElement;
+        fullscreenBtn.textContent = isFs ? '⊡' : '⛶';
+        wrapper.classList.toggle('fullscreen-mode', isFs);
+        showControls();
     };
 
     document.onkeydown = (e) => {

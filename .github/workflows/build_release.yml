@@ -36,7 +36,7 @@ jobs:
     - name: Download TorrServer for bundle
       shell: pwsh
       run: |
-        Invoke-WebRequest -Uri "https://github.com/YouROK/TorrServer/releases/latest/download/TorrServer-windows-386.exe" -OutFile "dist\TorrServer-windows-386.exe"
+        Invoke-WebRequest -Uri "https://github.com/YouROK/TorrServer/releases/latest/download/TorrServer-windows-amd64.exe" -OutFile "dist\TorrServer-windows-amd64.exe"
 
     - name: Upload artifact
       uses: actions/upload-artifact@v4
