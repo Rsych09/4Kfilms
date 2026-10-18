@@ -122,7 +122,10 @@
                 </div>
 
                 <div class="video-wrapper">
-                    <video id="player" preload="auto"></video>
+                    <video id="player" preload="auto" playsinline webkit-playsinline></video>
+
+                    <!-- Всплывающий индикатор Play/Pause по центру -->
+                    <div class="center-play-feedback" id="centerFeedback">▶</div>
 
                     <!-- Оверлей "Нажмите для воспроизведения" -->
                     <div class="player-overlay" id="playerOverlay" onclick="document.getElementById('player').play(); this.style.display='none';">

@@ -691,9 +691,32 @@ function initCustomControls(video) {
         }
     };
 
+    const triggerCenterFeedback = (isPaused) => {
+        const fb = document.getElementById('centerFeedback');
+        if (!fb) return;
+        fb.textContent = isPaused ? '❚❚' : '▶';
+        fb.classList.add('show');
+        clearTimeout(fb._timer);
+        fb._timer = setTimeout(() => {
+            fb.classList.remove('show');
+        }, 500);
+    };
+
+    const togglePlayPause = () => {
+        if (video.paused) {
+            video.play();
+            triggerCenterFeedback(false);
+            showControls(true);
+        } else {
+            video.pause();
+            triggerCenterFeedback(true);
+            showControls(false);
+        }
+    };
+
     playPauseBtn.onclick = (e) => {
         e.stopPropagation();
-        video.paused ? video.play() : video.pause();
+        togglePlayPause();
     };
 
     video.onpause = () => {
@@ -844,7 +867,7 @@ function initCustomControls(video) {
         if (document.getElementById('movieModal').style.display !== 'block') return;
         if (e.target.tagName === 'INPUT') return;
         switch (e.code) {
-            case 'Space':       e.preventDefault(); video.paused ? video.play() : video.pause(); break;
+            case 'Space':       e.preventDefault(); togglePlayPause(); break;
             case 'ArrowRight':  e.preventDefault(); skipRelative(10); break;
             case 'ArrowLeft':   e.preventDefault(); skipRelative(-10); break;
             case 'ArrowUp':     e.preventDefault(); video.volume = Math.min(1, video.volume + 0.1); volumeSlider.value = video.volume; updateVolumeIcon(video, volumeIcon); break;
@@ -855,16 +878,7 @@ function initCustomControls(video) {
     };
 
     video.onclick = () => {
-        if (controls.classList.contains('hidden')) {
-            showControls(true);
-        } else {
-            const isTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
-            if (isTouch) {
-                hideControls();
-            } else {
-                video.paused ? video.play() : video.pause();
-            }
-        }
+        togglePlayPause();
     };
 
     video.ondblclick = () => toggleFullscreen(wrapper, fullscreenBtn);
