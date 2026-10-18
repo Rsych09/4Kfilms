@@ -678,9 +678,16 @@ function initCustomControls(video) {
         progressBuf.style.width = `${pct * 100}%`;
     };
 
+    function getEventClientX(e) {
+        if (e.touches && e.touches.length > 0) return e.touches[0].clientX;
+        if (e.changedTouches && e.changedTouches.length > 0) return e.changedTouches[0].clientX;
+        return e.clientX;
+    }
+
     function handleSeekEvent(e, commit = false) {
+        const clientX = getEventClientX(e);
         const rect = progress.getBoundingClientRect();
-        const pct  = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+        const pct  = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
         const totalDuration = getTotalDuration(video);
         seekDragTime = Math.floor(pct * totalDuration);
 
@@ -697,17 +704,35 @@ function initCustomControls(video) {
         playerState.isDragging = true;
         handleSeekEvent(e, false);
     };
-    document.onmousemove = (e) => {
+    progress.addEventListener('touchstart', (e) => {
+        playerState.isDragging = true;
+        handleSeekEvent(e, false);
+    }, { passive: true });
+
+    document.addEventListener('mousemove', (e) => {
         if (playerState.isDragging) {
             handleSeekEvent(e, false);
         }
-    };
-    document.onmouseup = (e) => {
+    });
+    document.addEventListener('touchmove', (e) => {
+        if (playerState.isDragging) {
+            handleSeekEvent(e, false);
+        }
+    }, { passive: true });
+
+    document.addEventListener('mouseup', (e) => {
         if (playerState.isDragging) {
             playerState.isDragging = false;
             commitSeek(seekDragTime, video);
         }
-    };
+    });
+    document.addEventListener('touchend', (e) => {
+        if (playerState.isDragging) {
+            playerState.isDragging = false;
+            commitSeek(seekDragTime, video);
+        }
+    });
+
     progress.onclick = (e) => {
         handleSeekEvent(e, true);
     };
@@ -740,6 +765,7 @@ function initCustomControls(video) {
 
     wrapper.addEventListener('mousemove', showControls);
     wrapper.addEventListener('mouseenter', showControls);
+    wrapper.addEventListener('touchstart', showControls, { passive: true });
 
     // В полноэкранном режиме мышь может двигаться по любому месту экрана
     document.addEventListener('mousemove', (e) => {
@@ -772,6 +798,11 @@ function initCustomControls(video) {
     };
 
     document.onkeydown = (e) => {
+        if (e.key === 'Escape') {
+            closePhoneModal();
+            closeModal();
+            return;
+        }
         if (document.getElementById('movieModal').style.display !== 'block') return;
         if (e.target.tagName === 'INPUT') return;
         switch (e.code) {
@@ -782,6 +813,14 @@ function initCustomControls(video) {
             case 'ArrowDown':   e.preventDefault(); video.volume = Math.max(0, video.volume - 0.1); volumeSlider.value = video.volume; updateVolumeIcon(video, volumeIcon); break;
             case 'KeyF':        e.preventDefault(); toggleFullscreen(wrapper, fullscreenBtn); break;
             case 'KeyM':        e.preventDefault(); volumeIcon.click(); break;
+        }
+    };
+
+    video.onclick = () => {
+        if (controls.style.opacity === '0') {
+            showControls();
+        } else {
+            video.paused ? video.play() : video.pause();
         }
     };
 
@@ -821,9 +860,90 @@ function downloadM3U(url) {
 }
 
 function copyToClipboard(text) {
-    navigator.clipboard.writeText(text).then(() => {
-        showToast('📋 Ссылка на стрим скопирована!');
-    }).catch(() => {
-        alert('Ссылка: ' + text);
-    });
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(() => {
+            showToast('📋 Ссылка на стрим скопирована!');
+        }).catch(() => {
+            copyFallback(text, '📋 Ссылка скопирована!');
+        });
+    } else {
+        copyFallback(text, '📋 Ссылка скопирована!');
+    }
+}
+
+function copyFallback(text, msg = '📋 Скопировано!') {
+    const tempInput = document.createElement('input');
+    tempInput.value = text;
+    document.body.appendChild(tempInput);
+    tempInput.select();
+    try {
+        document.execCommand('copy');
+        showToast(msg);
+    } catch (err) {
+        alert('Адрес: ' + text);
+    }
+    document.body.removeChild(tempInput);
+}
+
+// ─── Подключение смартфона по QR-коду ───────────────────────────────────────
+
+let phoneNetworkUrl = '';
+
+async function openPhoneModal() {
+    const modal = document.getElementById('qrModal');
+    if (!modal) return;
+    modal.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+
+    const urlEl = document.getElementById('qrUrlText');
+    const imgEl = document.getElementById('qrCodeImg');
+    if (urlEl) urlEl.textContent = 'Определение адреса в сети...';
+
+    try {
+        const res = await fetch(`${BACKEND_URL}/network-info`);
+        if (res.ok) {
+            const data = await res.json();
+            phoneNetworkUrl = data.phone_url || window.location.origin;
+            if (urlEl) urlEl.textContent = phoneNetworkUrl;
+            if (imgEl && data.qr_code) {
+                imgEl.src = data.qr_code;
+            }
+        } else {
+            throw new Error(`HTTP ${res.status}`);
+        }
+    } catch (e) {
+        console.warn('Ошибка получения QR от бэкенда, пробуем fallback:', e);
+        phoneNetworkUrl = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+            ? `http://${window.location.hostname}:8080`
+            : window.location.origin;
+        if (urlEl) urlEl.textContent = phoneNetworkUrl;
+        if (imgEl) {
+            imgEl.src = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(phoneNetworkUrl)}`;
+        }
+    }
+}
+
+function closePhoneModal(e) {
+    if (e && e.target && e.target.id !== 'qrModal' && !e.target.classList.contains('qr-modal-close')) {
+        return;
+    }
+    const modal = document.getElementById('qrModal');
+    if (modal) modal.style.display = 'none';
+    const movieModal = document.getElementById('movieModal');
+    if (!movieModal || movieModal.style.display !== 'block') {
+        document.body.style.overflow = 'auto';
+    }
+}
+
+function copyPhoneUrl() {
+    if (!phoneNetworkUrl) return;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(phoneNetworkUrl).then(() => {
+            showToast('📋 Адрес скопирован в буфер обмена!');
+        }).catch(() => {
+            copyFallback(phoneNetworkUrl, '📋 Адрес скопирован в буфер обмена!');
+        });
+    } else {
+        copyFallback(phoneNetworkUrl, '📋 Адрес скопирован в буфер обмена!');
+    }
 }

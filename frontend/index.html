@@ -25,6 +25,10 @@
             <span class="status-pill" id="pillTorr"><span class="status-dot"></span> TorrServer</span>
             <span class="status-pill" id="pillVlc"><span class="status-dot"></span> VLC</span>
         </div>
+        <button class="phone-btn" id="btnPhoneConnect" onclick="openPhoneModal()" title="Смотреть на телефоне или планшете">
+            <span class="phone-btn-icon">📱</span>
+            <span class="phone-btn-text">На телефон</span>
+        </button>
         <div class="search-box">
             <input type="text" id="movieTitle" placeholder="Поиск фильмов...">
             <button onclick="searchMovie()">Найти</button>
@@ -184,7 +188,31 @@
         <div class="footer-logo">PERSONALCINEMA</div>
     </footer>
 
-    <div id="toastNotification" class="toast-notification"></div>
+    <!-- Модалка подключения телефона по QR-коду -->
+    <div class="qr-modal-overlay" id="qrModal" onclick="closePhoneModal(event)">
+        <div class="qr-modal-card" onclick="event.stopPropagation()">
+            <button class="qr-modal-close" onclick="closePhoneModal()">✕</button>
+            <div class="qr-icon-top">📱</div>
+            <h2>Смотреть на телефоне или планшете</h2>
+            <p class="qr-subtitle">Компьютер берет на себя всю нагрузку и скачивание, а вы можете лечь в кровать и смотреть фильм в 4K!</p>
+            
+            <div class="qr-box">
+                <img id="qrCodeImg" src="" alt="QR-код" class="qr-img">
+            </div>
+
+            <div class="qr-instruction">
+                <span>📷 Наведите камеру смартфона на QR-код или откройте адрес:</span>
+                <div class="qr-link-box">
+                    <span id="qrUrlText" class="qr-url-text">Загрузка...</span>
+                    <button class="qr-copy-btn" onclick="copyPhoneUrl()">Копировать</button>
+                </div>
+            </div>
+            
+            <div class="qr-tip">
+                💡 <strong>Важно:</strong> Телефон и компьютер должны быть подключены к одной домашней сети Wi-Fi.
+            </div>
+        </div>
+    </div>
 
     <script src="app.js"></script>
 </body>

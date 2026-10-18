@@ -30,6 +30,8 @@ cmd = [
     "--hidden-import", "uvicorn.protocols.http.auto",
     "--hidden-import", "uvicorn.protocols.websockets",
     "--hidden-import", "uvicorn.protocols.websockets.auto",
+    "--hidden-import", "qrcode",
+    "--hidden-import", "PIL",
 ]
 
 icon_path = os.path.join(PROJECT_ROOT, "icon.ico")

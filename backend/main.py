@@ -6,6 +6,9 @@ import time
 import shutil
 import subprocess
 import urllib.parse
+import io
+import base64
+import socket
 from contextlib import asynccontextmanager
 from typing import Optional, List, Dict, Any
 
@@ -217,6 +220,57 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+def get_all_local_ips() -> List[str]:
+    ips = []
+    try:
+        host = socket.gethostname()
+        for ip in socket.gethostbyname_ex(host)[2]:
+            if not ip.startswith('127.'):
+                ips.append(ip)
+    except Exception:
+        pass
+    home_ips = [ip for ip in ips if ip.startswith('192.168.') or ip.startswith('10.')]
+    if home_ips:
+        return home_ips + [ip for ip in ips if ip not in home_ips]
+    return ips or ['127.0.0.1']
+
+
+@app.get("/network-info")
+def get_network_info():
+    """Возвращает локальный IP адрес и сгенерированный QR-код для подключения с телефона."""
+    port = int(os.environ.get("PORT", 8080))
+    ips = get_all_local_ips()
+    primary_ip = ips[0]
+    phone_url = f"http://{primary_ip}:{port}"
+
+    qr_data_url = ""
+    try:
+        import qrcode
+        qr = qrcode.QRCode(
+            version=1,
+            error_correction=qrcode.constants.ERROR_CORRECT_M,
+            box_size=8,
+            border=2,
+        )
+        qr.add_data(phone_url)
+        qr.make(fit=True)
+        img = qr.make_image(fill_color="#e8001a", back_color="#ffffff")
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
+        qr_data_url = f"data:image/png;base64,{b64}"
+    except Exception as e:
+        print(f"[QR] Ошибка генерации: {e}")
+
+    return {
+        "primary_ip": primary_ip,
+        "port": port,
+        "phone_url": phone_url,
+        "all_ips": ips,
+        "qr_code": qr_data_url
+    }
 
 
 def parse_size_to_gb(val: Any) -> float:
@@ -676,6 +730,8 @@ if __name__ == "__main__":
         sys.path.insert(0, current_dir)
     os.chdir(current_dir)
     host = os.environ.get("HOST", "0.0.0.0")
-    port = int(os.environ.get("PORT", 8080))
-    print(f"[PersonalCinema 4K] Сервер запускается на http://{host}:{port}")
+    ips = get_all_local_ips()
+    primary_ip = ips[0]
+    print(f"[PersonalCinema 4K] Сервер запущен: http://127.0.0.1:{port}")
+    print(f"[PersonalCinema 4K] 📱 Доступ с телефона в домашней сети: http://{primary_ip}:{port}")
     uvicorn.run(app, host=host, port=port)
