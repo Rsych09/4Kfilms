@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PersonalCinema 4K</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <header class="main-header">
+        <div class="logo" onclick="showHomeScreen()">
+            <div class="logo-icon">🍿</div>
+            <span class="logo-text">PERSONALCINEMA</span>
+            <span>4K</span>
+        </div>
+        <div class="header-status" id="headerStatus">
+            <span class="status-pill" id="pillTorr"><span class="status-dot"></span> TorrServer</span>
+            <span class="status-pill" id="pillVlc"><span class="status-dot"></span> VLC</span>
+        </div>
+        <div class="search-box">
+            <input type="text" id="movieTitle" placeholder="Поиск фильмов...">
+            <button onclick="searchMovie()">Найти</button>
+        </div>
+    </header>
+
+    <main class="container" id="homeScreen">
+
+        <section class="hero-banner" id="heroBanner">
+            <div class="hero-content">
+                <div class="hero-label">✦ Сейчас в тренде</div>
+                <h1 id="heroTitle">Загрузка...</h1>
+                <p id="heroOverview"></p>
+                <button class="hero-btn" id="heroPlayBtn">Смотреть</button>
+            </div>
+        </section>
+
+        <section class="movie-section">
+            <div class="section-header">
+                <h2>🔥 Популярно сейчас</h2>
+                <div class="section-line"></div>
+            </div>
+            <div class="row-wrapper">
+                <button class="scroll-btn left"  onclick="scrollRow('trendingRow', -1)">&#8249;</button>
+                <div class="movie-row" id="trendingRow"></div>
+                <button class="scroll-btn right" onclick="scrollRow('trendingRow', 1)">&#8250;</button>
+            </div>
+        </section>
+
+        <section class="movie-section">
+            <div class="section-header">
+                <h2>💎 4K Ultra HD</h2>
+                <div class="section-line"></div>
+            </div>
+            <div class="row-wrapper">
+                <button class="scroll-btn left"  onclick="scrollRow('ultraHdRow', -1)">&#8249;</button>
+                <div class="movie-row" id="ultraHdRow"></div>
+                <button class="scroll-btn right" onclick="scrollRow('ultraHdRow', 1)">&#8250;</button>
+            </div>
+        </section>
+
+        <section class="movie-section">
+            <div class="section-header">
+                <h2>🏆 Топ Рейтинга</h2>
+                <div class="section-line"></div>
+            </div>
+            <div class="row-wrapper">
+                <button class="scroll-btn left"  onclick="scrollRow('topRatedRow', -1)">&#8249;</button>
+                <div class="movie-row" id="topRatedRow"></div>
+                <button class="scroll-btn right" onclick="scrollRow('topRatedRow', 1)">&#8250;</button>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Modal -->
+    <div class="modal" id="movieModal">
+        <div class="modal-content">
+            <span class="close-modal" onclick="closeModal()">✕</span>
+
+            <div class="modal-hero" id="modalHero"></div>
+
+            <div class="modal-body">
+                <div class="movie-details-layout">
+                    <img src="" id="modalPoster" alt="Постер">
+                    <div class="movie-detailed-info">
+                        <h1 id="modalTitle">Название фильма</h1>
+                        <div class="modal-meta">
+                            <span id="modalRating">★ 0.0</span>
+                            <span class="meta-tag" id="modalYear">2026</span>
+                        </div>
+                        <p id="modalOverview">Описание фильма...</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-divider"></div>
+
+            <!-- Кастомный плеер -->
+            <div class="player-container" id="playerContainer" style="display:none;">
+
+                <div class="player-header">
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <div class="player-dot"></div>
+                        <span>LIVE STREAM</span>
+                    </div>
+                    <label class="audio-fix-pill" title="Конвертирует AC3/DTS в AAC стерео на лету">
+                        <input type="checkbox" id="chkAudioFix" checked onchange="onToggleAudioFix()">
+                        <span>🔊 Звук в браузере (AAC)</span>
+                    </label>
+                </div>
+
+                <div class="video-wrapper">
+                    <video id="player" preload="auto"></video>
+
+                    <!-- Оверлей "Нажмите для воспроизведения" -->
+                    <div class="player-overlay" id="playerOverlay" onclick="document.getElementById('player').play(); this.style.display='none';">
+                        <div class="big-play-btn">▶</div>
+                    </div>
+
+                    <!-- Кастомные контролы -->
+                    <div class="custom-controls" id="customControls">
+
+                        <!-- Прогресс-бар -->
+                        <div class="progress-bar" id="progressBar">
+                            <div class="progress-buffer" id="progressBuffer"></div>
+                            <div class="progress-fill"   id="progressFill"></div>
+                            <div class="progress-thumb"  id="progressThumb"></div>
+                        </div>
+
+                        <div class="controls-row">
+                            <!-- Левые кнопки -->
+                            <div class="controls-left">
+                                <button class="ctrl-btn" id="btnPlayPause">▶</button>
+                                <button class="ctrl-btn" id="btnSkipBack"  onclick="document.getElementById('player').currentTime -= 10" title="-10с">⏪</button>
+                                <button class="ctrl-btn" id="btnSkipFwd"   onclick="document.getElementById('player').currentTime += 10" title="+10с">⏩</button>
+                                <div class="volume-group">
+                                    <button class="ctrl-btn" id="btnVolume">🔊</button>
+                                    <input type="range" id="volumeSlider" class="volume-slider" min="0" max="1" step="0.05" value="1">
+                                </div>
+                                <span class="time-display" id="timeDisplay">0:00 / 0:00</span>
+                            </div>
+
+                            <!-- Правые кнопки -->
+                            <div class="controls-right">
+                                <button class="ctrl-btn" id="btnFullscreen" title="Полный экран (F)">⛶</button>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+
+                <div id="nowPlaying" class="now-playing-status">Загрузка...</div>
+                <div id="fileSelectorContainer" class="file-selector-container" style="display:none;"></div>
+                <div id="audioSelectorContainer" class="audio-selector-container" style="display:none;"></div>
+
+            </div>
+
+            <div class="modal-divider" style="margin-top:0;"></div>
+
+            <div class="torrents-container">
+                <h3>Выберите раздачу</h3>
+                <p class="torrents-hint">
+                    <strong style="color:var(--text);font-weight:600;">Смотреть</strong> — воспроизведение в браузере
+                    &nbsp;·&nbsp;
+                    <strong style="color:var(--text);font-weight:600;">VLC</strong> — запуск в плеере (1 клик) или .m3u для 4K/HEVC
+                </p>
+                <div id="statusMessage" class="status-message">Нажмите на фильм чтобы загрузить список раздач.</div>
+                <div id="resultsGrid" class="results-grid"></div>
+            </div>
+
+        </div>
+    </div>
+
+    <footer class="main-footer">
+        <p>Каталог · TMDB API &nbsp;·&nbsp; Стриминг · TorrServer + RuTor</p>
+        <div class="footer-logo">PERSONALCINEMA</div>
+    </footer>
+
+    <div id="toastNotification" class="toast-notification"></div>
+
+    <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: personalcinema-4k
+    env: docker
+    plan: free
+    region: frankfurt
+    envVars:
+      - key: PORT
+        value: 8080
+      - key: HOST
+        value: 0.0.0.0

@@ -1,0 +1,28 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyd
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+
+# TorrServer local databases & logs
+config.db
+*.db
+torrserver.log
+torrserver_data/
+
+# IDE & OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Scratch scripts & temp files
+scratch/
+*.tmp
