@@ -107,6 +107,17 @@ async function loadCatalog() {
     }
 }
 
+function formatViews(count) {
+    if (!count || count <= 0) return '';
+    if (count >= 1000000) {
+        return (count / 1000000).toFixed(1).replace(/\.0$/, '') + 'M';
+    }
+    if (count >= 1000) {
+        return (count / 1000).toFixed(1).replace(/\.0$/, '') + 'K';
+    }
+    return count.toString();
+}
+
 function setupHeroBanner(movie) {
     const banner = document.getElementById('heroBanner');
     if (!banner || !movie) return;
@@ -116,6 +127,27 @@ function setupHeroBanner(movie) {
     document.getElementById('heroTitle').textContent    = movie.title;
     document.getElementById('heroOverview').textContent = movie.overview || '';
     document.getElementById('heroPlayBtn').onclick      = () => openMovieDetails(movie);
+
+    const heroMeta = document.getElementById('heroMeta');
+    if (heroMeta) {
+        heroMeta.style.display = 'flex';
+        const ratingEl = document.getElementById('heroRating');
+        if (ratingEl) ratingEl.textContent = `★ ${movie.vote_average ? movie.vote_average.toFixed(1) : '—'}`;
+        const viewsEl = document.getElementById('heroViews');
+        if (viewsEl) {
+            if (movie.vote_count) {
+                viewsEl.style.display = 'inline-flex';
+                viewsEl.textContent = `👁 ${formatViews(movie.vote_count)} зрителей`;
+                viewsEl.title = `Реальное количество проверенных зрителей (TMDB): ${movie.vote_count.toLocaleString('ru-RU')}`;
+            } else {
+                viewsEl.style.display = 'none';
+            }
+        }
+        const yearEl = document.getElementById('heroYear');
+        if (yearEl) {
+            yearEl.textContent = movie.release_date ? movie.release_date.split('-')[0] : '';
+        }
+    }
 }
 
 function renderRow(movies, rowId) {
@@ -128,8 +160,18 @@ function renderRow(movies, rowId) {
         card.className = 'movie-card';
         card.style.animationDelay = `${i * 0.04}s`;
         card.onclick = () => openMovieDetails(movie);
+
+        const ratingVal = movie.vote_average ? movie.vote_average.toFixed(1) : '—';
+        const viewsStr = movie.vote_count ? formatViews(movie.vote_count) : '';
+        const viewsHtml = viewsStr 
+            ? `<span class="rating-views" title="Просмотров/оценок зрителей: ${movie.vote_count.toLocaleString('ru-RU')}">👁 ${viewsStr}</span>`
+            : '';
+
         card.innerHTML = `
-            <div class="movie-card-rating">★ ${movie.vote_average ? movie.vote_average.toFixed(1) : '—'}</div>
+            <div class="movie-card-rating">
+                <span class="rating-val">★ ${ratingVal}</span>
+                ${viewsHtml}
+            </div>
             <img src="${TMDB_IMAGE_URL}${movie.poster_path}" alt="${escapeHtml(movie.title)}" loading="lazy">
             <div class="movie-card-overlay"><div class="movie-card-play">▶</div></div>
             <div class="movie-card-title">${escapeHtml(movie.title)}</div>
@@ -159,6 +201,14 @@ function openMovieDetails(movie) {
                     console.log(`[TMDB] Длительность: ${data.runtime} мин (${currentPlayback.duration} сек)`);
                     updateTimeDisplay(0, currentPlayback.duration);
                 }
+                if (data.vote_count && modalViews) {
+                    modalViews.style.display = 'inline-flex';
+                    modalViews.innerHTML = `👁 ${data.vote_count.toLocaleString('ru-RU')} зрителей`;
+                    modalViews.title = 'Реальное количество проверенных оценок зрителей в мировой базе TMDB';
+                }
+                if (data.vote_average && document.getElementById('modalRating')) {
+                    document.getElementById('modalRating').textContent = `★ ${data.vote_average.toFixed(1)}`;
+                }
             })
             .catch(() => {});
     }
@@ -182,6 +232,17 @@ function openMovieDetails(movie) {
     document.getElementById('modalRating').textContent   = `★ ${movie.vote_average ? movie.vote_average.toFixed(1) : '—'}`;
     document.getElementById('modalYear').textContent     = movie.release_date ? movie.release_date.split('-')[0] : '—';
     document.getElementById('modalOverview').textContent = movie.overview || 'Описание отсутствует.';
+
+    const modalViews = document.getElementById('modalViews');
+    if (modalViews) {
+        if (movie.vote_count) {
+            modalViews.style.display = 'inline-flex';
+            modalViews.innerHTML = `👁 ${movie.vote_count.toLocaleString('ru-RU')} зрителей`;
+            modalViews.title = 'Реальное количество проверенных оценок зрителей в мировой базе TMDB';
+        } else {
+            modalViews.style.display = 'none';
+        }
+    }
 
     fetchTorrents(movie.title);
 }

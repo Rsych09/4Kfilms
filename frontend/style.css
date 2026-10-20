@@ -239,6 +239,39 @@ body::before {
     text-shadow: 0 2px 20px rgba(0,0,0,0.5);
 }
 
+
+.hero-meta {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+    font-size: 13px;
+    flex-wrap: wrap;
+}
+.hero-rating {
+    color: var(--green);
+    background: rgba(0,201,122,0.15);
+    border: 1px solid rgba(0,201,122,0.3);
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-weight: 600;
+}
+.hero-views {
+    color: rgba(240,236,228,0.85);
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.14);
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-weight: 500;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+.hero-year {
+    color: var(--muted);
+    font-weight: 400;
+}
+
 .hero-content p {
     font-size: 14px;
     line-height: 1.65;
@@ -390,7 +423,8 @@ body::before {
     box-shadow: 0 0 16px rgba(232,0,26,0.6);
 }
 
-.movie-card-title {
+
+    .movie-card-title {
     padding: 10px 12px 12px;
     font-size: 12px;
     font-weight: 400;
@@ -405,14 +439,35 @@ body::before {
     position: absolute;
     top: 10px;
     left: 10px;
-    background: rgba(0,0,0,0.75);
+    background: rgba(0,0,0,0.78);
     backdrop-filter: blur(8px);
     padding: 3px 8px;
     border-radius: 20px;
     font-size: 11px;
     font-weight: 600;
+    border: 1px solid rgba(255,255,255,0.12);
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+    user-select: none;
+    pointer-events: none;
+}
+.movie-card-rating .rating-val {
     color: var(--green);
-    border: 1px solid rgba(0,201,122,0.2);
+}
+.movie-card-rating .rating-views {
+    color: rgba(240,236,228,0.85);
+    font-weight: 500;
+    font-size: 10.5px;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+}
+.movie-card-rating .rating-views::before {
+    content: '•';
+    margin-right: 3px;
+    color: rgba(255,255,255,0.3);
 }
 
 /* ─── Modal ─────────────────────────────────────────────────────────────────── */
@@ -535,6 +590,16 @@ body::before {
     padding: 4px 12px;
     border-radius: 20px;
     letter-spacing: 0.3px;
+}
+
+
+.meta-views {
+    color: rgba(240,236,228,0.9);
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.12);
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
 }
 
 #modalRating {
@@ -1509,6 +1574,21 @@ video { outline: none; }
     }
     .movie-card-poster {
         height: 185px;
+    }
+    .movie-card-rating {
+        top: 6px;
+        left: 6px;
+        padding: 2px 6px;
+        font-size: 10px;
+        gap: 3px;
+    }
+    .movie-card-rating .rating-views {
+        font-size: 9.5px;
+    }
+    .hero-meta {
+        margin-bottom: 12px;
+        gap: 8px;
+        font-size: 12px;
     }
     .movie-card-title {
         font-size: 12px;
