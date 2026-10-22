@@ -13,6 +13,7 @@ const TMDB_BASE_URL     = 'https://api.themoviedb.org/3';
 const TMDB_IMAGE_URL    = 'https://image.tmdb.org/t/p/w500';
 const TMDB_BACKDROP_URL = 'https://image.tmdb.org/t/p/original';
 
+const imdbStatsCache = {};
 const magnetStore = {};
 let magnetCounter = 0;
 
@@ -118,6 +119,63 @@ function formatViews(count) {
     return count.toString();
 }
 
+async function fetchImdbStatsForMovies(movies) {
+    if (!movies || !movies.length) return;
+    const toQuery = movies.filter(m => m && m.id && !imdbStatsCache[m.id]);
+    if (toQuery.length === 0) {
+        movies.forEach(m => {
+            if (m && m.id && imdbStatsCache[m.id]) {
+                applyImdbStatsToDom(m.id, imdbStatsCache[m.id]);
+            }
+        });
+        return;
+    }
+
+    try {
+        const payload = {
+            items: toQuery.map(m => ({
+                id: m.id,
+                title: m.original_title || m.title || '',
+                year: (m.release_date || '').slice(0, 4)
+            }))
+        };
+        const res = await fetch(`${BACKEND_URL}/imdb-batch`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        Object.entries(data).forEach(([idStr, stats]) => {
+            const mId = parseInt(idStr, 10);
+            imdbStatsCache[mId] = stats;
+            applyImdbStatsToDom(mId, stats);
+        });
+    } catch (e) {
+        console.warn('[IMDb] Ошибка получения пакетной статистики:', e);
+    }
+}
+
+function applyImdbStatsToDom(tmdbId, stats) {
+    if (!stats) return;
+    const viewsEls = document.querySelectorAll(`[data-views-id="${tmdbId}"]`);
+    viewsEls.forEach(el => {
+        if (stats.votes > 0) {
+            el.style.display = 'inline-flex';
+            el.textContent = `👁 ${formatViews(stats.votes)}`;
+            el.title = `Просмотров / оценок на IMDb: ${stats.votes.toLocaleString('ru-RU')}`;
+        }
+    });
+
+    if (stats.rating) {
+        const ratingEls = document.querySelectorAll(`[data-rating-id="${tmdbId}"]`);
+        ratingEls.forEach(el => {
+            el.textContent = `★ ${stats.rating.toFixed(1)}`;
+            el.title = `Рейтинг IMDb: ${stats.rating.toFixed(1)}`;
+        });
+    }
+}
+
 function setupHeroBanner(movie) {
     const banner = document.getElementById('heroBanner');
     if (!banner || !movie) return;
@@ -135,12 +193,45 @@ function setupHeroBanner(movie) {
         if (ratingEl) ratingEl.textContent = `★ ${movie.vote_average ? movie.vote_average.toFixed(1) : '—'}`;
         const viewsEl = document.getElementById('heroViews');
         if (viewsEl) {
-            if (movie.vote_count) {
+            const s = imdbStatsCache[movie.id];
+            if (s && s.votes > 0) {
                 viewsEl.style.display = 'inline-flex';
-                viewsEl.textContent = `👁 ${formatViews(movie.vote_count)} зрителей`;
-                viewsEl.title = `Реальное количество проверенных зрителей (TMDB): ${movie.vote_count.toLocaleString('ru-RU')}`;
+                viewsEl.textContent = `👁 ${formatViews(s.votes)} просмотров на IMDb`;
+                viewsEl.title = `Реальное количество проверенных просмотров / оценок на IMDb: ${s.votes.toLocaleString('ru-RU')}`;
+                if (s.rating && ratingEl) {
+                    ratingEl.textContent = `★ ${s.rating.toFixed(1)}`;
+                    ratingEl.title = `Рейтинг IMDb: ${s.rating.toFixed(1)}`;
+                }
             } else {
-                viewsEl.style.display = 'none';
+                viewsEl.style.display = 'inline-flex';
+                viewsEl.textContent = `👁 Загрузка IMDb...`;
+                const year = (movie.release_date || '').slice(0, 4);
+                fetch(`${BACKEND_URL}/imdb-stats?tmdb_id=${movie.id}&title=${encodeURIComponent(movie.original_title || movie.title || '')}&year=${year}`)
+                    .then(r => r.json())
+                    .then(stats => {
+                        imdbStatsCache[movie.id] = stats;
+                        if (stats.votes > 0) {
+                            viewsEl.textContent = `👁 ${formatViews(stats.votes)} просмотров на IMDb`;
+                            viewsEl.title = `Реальное количество проверенных просмотров / оценок на IMDb: ${stats.votes.toLocaleString('ru-RU')}`;
+                        } else if (movie.vote_count) {
+                            viewsEl.textContent = `👁 ${formatViews(movie.vote_count)} просмотров`;
+                            viewsEl.title = `Оценок зрителей: ${movie.vote_count.toLocaleString('ru-RU')}`;
+                        } else {
+                            viewsEl.style.display = 'none';
+                        }
+                        if (stats.rating && ratingEl) {
+                            ratingEl.textContent = `★ ${stats.rating.toFixed(1)}`;
+                            ratingEl.title = `Рейтинг IMDb: ${stats.rating.toFixed(1)}`;
+                        }
+                    })
+                    .catch(() => {
+                        if (movie.vote_count) {
+                            viewsEl.textContent = `👁 ${formatViews(movie.vote_count)} просмотров`;
+                            viewsEl.title = `Оценок зрителей: ${movie.vote_count.toLocaleString('ru-RU')}`;
+                        } else {
+                            viewsEl.style.display = 'none';
+                        }
+                    });
             }
         }
         const yearEl = document.getElementById('heroYear');
@@ -161,15 +252,21 @@ function renderRow(movies, rowId) {
         card.style.animationDelay = `${i * 0.04}s`;
         card.onclick = () => openMovieDetails(movie);
 
-        const ratingVal = movie.vote_average ? movie.vote_average.toFixed(1) : '—';
-        const viewsStr = movie.vote_count ? formatViews(movie.vote_count) : '';
+        const cached = imdbStatsCache[movie.id];
+        const ratingVal = (cached && cached.rating) ? cached.rating.toFixed(1) : (movie.vote_average ? movie.vote_average.toFixed(1) : '—');
+        const votesVal = (cached && cached.votes > 0) ? cached.votes : (movie.vote_count || 0);
+        const viewsStr = votesVal ? formatViews(votesVal) : '';
+        const viewsTitle = (cached && cached.votes > 0)
+            ? `Просмотров / оценок на IMDb: ${cached.votes.toLocaleString('ru-RU')}`
+            : (votesVal ? `Оценок/просмотров: ${votesVal.toLocaleString('ru-RU')}` : '');
+
         const viewsHtml = viewsStr 
-            ? `<span class="rating-views" title="Просмотров/оценок зрителей: ${movie.vote_count.toLocaleString('ru-RU')}">👁 ${viewsStr}</span>`
-            : '';
+            ? `<span class="rating-views" data-views-id="${movie.id}" title="${viewsTitle}">👁 ${viewsStr}</span>`
+            : `<span class="rating-views" data-views-id="${movie.id}" style="display:none;"></span>`;
 
         card.innerHTML = `
             <div class="movie-card-rating">
-                <span class="rating-val">★ ${ratingVal}</span>
+                <span class="rating-val" data-rating-id="${movie.id}">★ ${ratingVal}</span>
                 ${viewsHtml}
             </div>
             <img src="${TMDB_IMAGE_URL}${movie.poster_path}" alt="${escapeHtml(movie.title)}" loading="lazy">
@@ -178,6 +275,8 @@ function renderRow(movies, rowId) {
         `;
         row.appendChild(card);
     });
+
+    fetchImdbStatsForMovies(movies);
 }
 
 // ─── Модалка ─────────────────────────────────────────────────────────────────
@@ -191,7 +290,23 @@ function openMovieDetails(movie) {
     currentPlayback.seekTime = 0;
     currentPlayback.duration = 7200;
 
-    // Загружаем точную длительность фильма из TMDB если есть ID
+    const modalViews = document.getElementById('modalViews');
+    if (modalViews) {
+        if (imdbStatsCache[movie.id] && imdbStatsCache[movie.id].votes > 0) {
+            const s = imdbStatsCache[movie.id];
+            modalViews.style.display = 'inline-flex';
+            modalViews.innerHTML = `👁 ${s.votes.toLocaleString('ru-RU')} просмотров на IMDb`;
+            modalViews.title = `Реальное количество проверенных просмотров / оценок в мировой базе IMDb: ${s.votes.toLocaleString('ru-RU')}`;
+        } else if (movie.vote_count) {
+            modalViews.style.display = 'inline-flex';
+            modalViews.innerHTML = `👁 ${movie.vote_count.toLocaleString('ru-RU')} просмотров`;
+            modalViews.title = 'Оценки зрителей';
+        } else {
+            modalViews.style.display = 'none';
+        }
+    }
+
+    // Загружаем точную длительность фильма и внешние данные
     if (movie.id) {
         fetch(`https://api.themoviedb.org/3/movie/${movie.id}?api_key=${TMDB_API_KEY}&language=ru-RU`)
             .then(r => r.json())
@@ -201,12 +316,36 @@ function openMovieDetails(movie) {
                     console.log(`[TMDB] Длительность: ${data.runtime} мин (${currentPlayback.duration} сек)`);
                     updateTimeDisplay(0, currentPlayback.duration);
                 }
-                if (data.vote_count && modalViews) {
-                    modalViews.style.display = 'inline-flex';
-                    modalViews.innerHTML = `👁 ${data.vote_count.toLocaleString('ru-RU')} зрителей`;
-                    modalViews.title = 'Реальное количество проверенных оценок зрителей в мировой базе TMDB';
-                }
-                if (data.vote_average && document.getElementById('modalRating')) {
+                const year = (movie.release_date || data.release_date || '').slice(0, 4);
+                const titleQuery = movie.original_title || data.original_title || movie.title || data.title || '';
+                const imdbQuery = data.imdb_id || movie.imdb_id || '';
+
+                fetch(`${BACKEND_URL}/imdb-stats?tmdb_id=${movie.id}&imdb_id=${imdbQuery}&title=${encodeURIComponent(titleQuery)}&year=${year}`)
+                    .then(res => res.json())
+                    .then(imdbData => {
+                        imdbStatsCache[movie.id] = imdbData;
+                        if (imdbData.votes > 0 && modalViews) {
+                            modalViews.style.display = 'inline-flex';
+                            modalViews.innerHTML = `👁 ${imdbData.votes.toLocaleString('ru-RU')} просмотров на IMDb`;
+                            modalViews.title = `Реальное количество проверенных просмотров / оценок в мировой базе IMDb: ${imdbData.votes.toLocaleString('ru-RU')}`;
+                        } else if (data.vote_count && modalViews) {
+                            modalViews.style.display = 'inline-flex';
+                            modalViews.innerHTML = `👁 ${data.vote_count.toLocaleString('ru-RU')} просмотров`;
+                            modalViews.title = 'Оценки зрителей TMDB';
+                        }
+                        if (imdbData.rating && document.getElementById('modalRating')) {
+                            document.getElementById('modalRating').textContent = `★ ${imdbData.rating.toFixed(1)} IMDb`;
+                            document.getElementById('modalRating').title = `Рейтинг фильма на IMDb: ${imdbData.rating.toFixed(1)}`;
+                        }
+                    })
+                    .catch(() => {
+                        if (data.vote_count && modalViews) {
+                            modalViews.style.display = 'inline-flex';
+                            modalViews.innerHTML = `👁 ${data.vote_count.toLocaleString('ru-RU')} просмотров`;
+                        }
+                    });
+
+                if (data.vote_average && document.getElementById('modalRating') && !document.getElementById('modalRating').textContent.includes('IMDb')) {
                     document.getElementById('modalRating').textContent = `★ ${data.vote_average.toFixed(1)}`;
                 }
             })
@@ -229,20 +368,12 @@ function openMovieDetails(movie) {
 
     document.getElementById('modalPoster').src           = movie.poster_path ? `${TMDB_IMAGE_URL}${movie.poster_path}` : '';
     document.getElementById('modalTitle').textContent    = movie.title;
-    document.getElementById('modalRating').textContent   = `★ ${movie.vote_average ? movie.vote_average.toFixed(1) : '—'}`;
+    const initialRating = (imdbStatsCache[movie.id] && imdbStatsCache[movie.id].rating) 
+        ? `${imdbStatsCache[movie.id].rating.toFixed(1)} IMDb` 
+        : (movie.vote_average ? movie.vote_average.toFixed(1) : '—');
+    document.getElementById('modalRating').textContent   = `★ ${initialRating}`;
     document.getElementById('modalYear').textContent     = movie.release_date ? movie.release_date.split('-')[0] : '—';
     document.getElementById('modalOverview').textContent = movie.overview || 'Описание отсутствует.';
-
-    const modalViews = document.getElementById('modalViews');
-    if (modalViews) {
-        if (movie.vote_count) {
-            modalViews.style.display = 'inline-flex';
-            modalViews.innerHTML = `👁 ${movie.vote_count.toLocaleString('ru-RU')} зрителей`;
-            modalViews.title = 'Реальное количество проверенных оценок зрителей в мировой базе TMDB';
-        } else {
-            modalViews.style.display = 'none';
-        }
-    }
 
     fetchTorrents(movie.title);
 }

@@ -9,6 +9,8 @@ import urllib.parse
 import io
 import base64
 import socket
+import sqlite3
+import concurrent.futures
 from contextlib import asynccontextmanager
 from typing import Optional, List, Dict, Any
 
@@ -42,6 +44,181 @@ VLC_CANDIDATES = [
     shutil.which("vlc")
 ]
 VLC_PATH = next((p for p in VLC_CANDIDATES if p and os.path.exists(p)), None)
+
+IMDB_CACHE_DB = os.path.join(APP_DIR, "imdb_cache.db")
+OMDB_KEYS = [
+    "trilogy", "564727fa", "fc1fef96", "4a3b711b", "thewdb", "b9bd48a6"
+]
+if os.environ.get("OMDB_API_KEY"):
+    OMDB_KEYS.insert(0, os.environ.get("OMDB_API_KEY").strip())
+
+_omdb_key_index = 0
+_imdb_mem_cache: Dict[int, Dict[str, Any]] = {}
+
+
+def init_imdb_db():
+    try:
+        conn = sqlite3.connect(IMDB_CACHE_DB)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS imdb_cache (
+                tmdb_id INTEGER PRIMARY KEY,
+                imdb_id TEXT,
+                votes INTEGER,
+                rating REAL,
+                title TEXT,
+                updated_at INTEGER
+            )
+        """)
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"[IMDB-CACHE] Ошибка инициализации БД: {e}")
+
+init_imdb_db()
+
+
+def get_cached_imdb(tmdb_id: int) -> Optional[Dict[str, Any]]:
+    if tmdb_id in _imdb_mem_cache:
+        mem = _imdb_mem_cache[tmdb_id]
+        if time.time() - mem.get("updated_at", 0) < 7 * 86400:
+            return mem
+
+    try:
+        conn = sqlite3.connect(IMDB_CACHE_DB, timeout=5)
+        cur = conn.cursor()
+        cur.execute("SELECT imdb_id, votes, rating, title, updated_at FROM imdb_cache WHERE tmdb_id = ?", (tmdb_id,))
+        row = cur.fetchone()
+        conn.close()
+        if row:
+            imdb_id, votes, rating, title, updated_at = row
+            if time.time() - updated_at < 7 * 86400:
+                res = {
+                    "tmdb_id": tmdb_id,
+                    "imdb_id": imdb_id,
+                    "votes": votes or 0,
+                    "rating": rating,
+                    "title": title or "",
+                    "source": "imdb" if (votes and votes > 0) else "none",
+                    "updated_at": updated_at
+                }
+                _imdb_mem_cache[tmdb_id] = res
+                return res
+    except Exception as e:
+        print(f"[IMDB-CACHE] Ошибка чтения кэша: {e}")
+    return None
+
+
+def save_cached_imdb(tmdb_id: int, imdb_id: str, votes: int, rating: Optional[float], title: str = ""):
+    now = int(time.time())
+    entry = {
+        "tmdb_id": tmdb_id,
+        "imdb_id": imdb_id,
+        "votes": votes or 0,
+        "rating": rating,
+        "title": title,
+        "source": "imdb" if (votes and votes > 0) else "none",
+        "updated_at": now
+    }
+    _imdb_mem_cache[tmdb_id] = entry
+    try:
+        conn = sqlite3.connect(IMDB_CACHE_DB, timeout=5)
+        conn.execute("""
+            INSERT OR REPLACE INTO imdb_cache (tmdb_id, imdb_id, votes, rating, title, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (tmdb_id, imdb_id, votes, rating, title, now))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"[IMDB-CACHE] Ошибка записи в кэш: {e}")
+
+
+def query_omdb(imdb_id: Optional[str] = None, title: Optional[str] = None, year: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    global _omdb_key_index
+    for _ in range(len(OMDB_KEYS)):
+        key = OMDB_KEYS[_omdb_key_index % len(OMDB_KEYS)]
+        _omdb_key_index += 1
+        try:
+            params = {"apikey": key}
+            if imdb_id:
+                params["i"] = imdb_id
+            elif title:
+                params["t"] = title
+                if year:
+                    params["y"] = year
+            else:
+                return None
+
+            res = requests.get("http://www.omdbapi.com/", params=params, timeout=4)
+            if res.status_code == 200:
+                data = res.json()
+                if data.get("Response") == "True":
+                    v_raw = data.get("imdbVotes", "0").replace(",", "").strip()
+                    votes = int(v_raw) if v_raw.isdigit() else 0
+                    r_raw = data.get("imdbRating", "N/A")
+                    rating = float(r_raw) if (r_raw and r_raw not in ["N/A", ""]) else None
+                    found_id = data.get("imdbID") or imdb_id or ""
+                    return {"imdb_id": found_id, "votes": votes, "rating": rating}
+                elif data.get("Error") == "Request limit reached!":
+                    continue
+                else:
+                    return {"imdb_id": imdb_id or "", "votes": 0, "rating": None}
+        except Exception:
+            continue
+    return None
+
+
+def fetch_single_imdb_stats(
+    tmdb_id: int,
+    imdb_id: Optional[str] = None,
+    title: Optional[str] = None,
+    year: Optional[str] = None
+) -> Dict[str, Any]:
+    cached = get_cached_imdb(tmdb_id)
+    if cached:
+        return cached
+
+    found_imdb_id = imdb_id
+    if not found_imdb_id and tmdb_id:
+        try:
+            r = requests.get(
+                f"https://api.themoviedb.org/3/movie/{tmdb_id}/external_ids",
+                params={"api_key": TMDB_API_KEY},
+                timeout=4
+            )
+            if r.status_code == 200:
+                found_imdb_id = r.json().get("imdb_id")
+        except Exception:
+            pass
+
+    omdb_res = None
+    if found_imdb_id:
+        omdb_res = query_omdb(imdb_id=found_imdb_id)
+    if not omdb_res and title:
+        omdb_res = query_omdb(title=title, year=year)
+
+    if omdb_res:
+        votes = omdb_res.get("votes", 0)
+        rating = omdb_res.get("rating")
+        final_imdb_id = omdb_res.get("imdb_id") or found_imdb_id or ""
+        save_cached_imdb(tmdb_id, final_imdb_id, votes, rating, title or "")
+        return {
+            "tmdb_id": tmdb_id,
+            "imdb_id": final_imdb_id,
+            "votes": votes,
+            "rating": rating,
+            "title": title or "",
+            "source": "imdb" if votes > 0 else "none"
+        }
+
+    save_cached_imdb(tmdb_id, found_imdb_id or "", 0, None, title or "")
+    return {
+        "tmdb_id": tmdb_id,
+        "imdb_id": found_imdb_id or "",
+        "votes": 0,
+        "rating": None,
+        "title": title or "",
+        "source": "none"
+    }
 
 
 def download_torrserver(dest_path: str) -> bool:
@@ -203,7 +380,8 @@ def open_browser_delayed():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # При старте приложения проверяем TorrServer
+    # При старте приложения инициализируем базу кэша IMDb и проверяем TorrServer
+    init_imdb_db()
     ensure_torrserver_running()
     # Автоматически открываем веб-интерфейс в браузере (на локальной машине)
     import threading
@@ -393,6 +571,68 @@ def get_system_status():
         "jackett": {"running": jackett_ok},
         "vlc": {"installed": VLC_PATH is not None, "path": VLC_PATH}
     }
+
+
+@app.get("/imdb-stats")
+def get_imdb_stats(
+    tmdb_id: int = Query(...),
+    imdb_id: Optional[str] = Query(None),
+    title: Optional[str] = Query(None),
+    year: Optional[str] = Query(None)
+):
+    """Возвращает количество просмотров (голосов) и рейтинг с IMDb для фильма."""
+    return fetch_single_imdb_stats(tmdb_id, imdb_id=imdb_id, title=title, year=year)
+
+
+@app.post("/imdb-batch")
+async def get_imdb_batch(request: Request):
+    """
+    Пакетно возвращает статистику просмотров и оценок IMDb для списка фильмов.
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    items = body.get("items", [])
+    results: Dict[str, Any] = {}
+
+    to_fetch = []
+    for item in items:
+        m_id = item.get("id")
+        if not m_id:
+            continue
+        try:
+            m_id_int = int(m_id)
+        except (ValueError, TypeError):
+            continue
+
+        cached = get_cached_imdb(m_id_int)
+        if cached:
+            results[str(m_id_int)] = cached
+        else:
+            to_fetch.append(item)
+
+    if to_fetch:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+            future_to_id = {
+                executor.submit(
+                    fetch_single_imdb_stats,
+                    int(it["id"]),
+                    it.get("imdb_id"),
+                    it.get("title") or it.get("original_title"),
+                    str(it.get("year", ""))[:4] if it.get("year") else None
+                ): str(it["id"])
+                for it in to_fetch if it.get("id")
+            }
+            for fut in concurrent.futures.as_completed(future_to_id):
+                item_id = future_to_id[fut]
+                try:
+                    res = fut.result()
+                    results[item_id] = res
+                except Exception:
+                    results[item_id] = {"tmdb_id": int(item_id), "votes": 0, "rating": None, "source": "none"}
+
+    return results
 
 
 @app.get("/search")
