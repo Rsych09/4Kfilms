@@ -29,9 +29,12 @@
             <span class="phone-btn-icon">📱</span>
             <span class="phone-btn-text">На телефон</span>
         </button>
-        <div class="search-box">
-            <input type="text" id="movieTitle" placeholder="Поиск фильмов...">
-            <button onclick="searchMovie()">Найти</button>
+        <div class="search-box-wrapper">
+            <div class="search-box">
+                <input type="text" id="movieTitle" placeholder="Поиск фильмов..." autocomplete="off">
+                <button onclick="searchMovie()">Найти</button>
+            </div>
+            <div class="search-suggestions" id="searchSuggestions" style="display:none;"></div>
         </div>
     </header>
 

@@ -112,12 +112,17 @@ body::before {
     margin-left: 2px;
 }
 
+.search-box-wrapper {
+    position: relative;
+    width: 38%;
+    max-width: 480px;
+}
+
 .search-box {
     display: flex;
     align-items: center;
     gap: 0;
-    width: 38%;
-    max-width: 480px;
+    width: 100%;
     background: var(--surface2);
     border: 1px solid var(--border);
     border-radius: 8px;
@@ -158,6 +163,104 @@ body::before {
     white-space: nowrap;
 }
 .search-box button:hover { background: #ff1a2e; }
+
+/* ─── Search Suggestions Dropdown ────────────────────────────────────────── */
+.search-suggestions {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    right: 0;
+    background: rgba(14, 16, 22, 0.96);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 10px;
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(255, 255, 255, 0.05);
+    z-index: 1000;
+    overflow: hidden;
+    max-height: 420px;
+    overflow-y: auto;
+}
+.suggestion-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 12px;
+    cursor: pointer;
+    transition: background 0.15s;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+.suggestion-item:last-child {
+    border-bottom: none;
+}
+.suggestion-item:hover, .suggestion-item.active {
+    background: rgba(232, 0, 26, 0.14);
+}
+.suggestion-poster {
+    width: 36px;
+    height: 52px;
+    border-radius: 4px;
+    object-fit: cover;
+    background: #111;
+    flex-shrink: 0;
+}
+.suggestion-poster-placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    background: rgba(255, 255, 255, 0.05);
+}
+.suggestion-info {
+    flex: 1;
+    min-width: 0;
+}
+.suggestion-title {
+    font-size: 13.5px;
+    font-weight: 500;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.suggestion-meta {
+    font-size: 11.5px;
+    color: var(--muted);
+    margin-top: 3px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.suggestion-year {
+    color: rgba(240, 236, 228, 0.7);
+}
+.suggestion-rating {
+    color: var(--green);
+    font-weight: 600;
+}
+.suggestion-empty {
+    padding: 16px 14px;
+    text-align: center;
+    color: var(--muted);
+    font-size: 13px;
+}
+.suggestion-all-btn {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    background: rgba(255, 255, 255, 0.03);
+    color: rgba(240, 236, 228, 0.8);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    transition: background 0.15s, color 0.15s;
+}
+.suggestion-all-btn:hover {
+    background: rgba(232, 0, 26, 0.2);
+    color: #fff;
+}
 
 /* ─── Container ─────────────────────────────────────────────────────────────── */
 .container {
@@ -425,14 +528,43 @@ body::before {
 
 
     .movie-card-title {
-    padding: 10px 12px 12px;
+    padding: 10px 12px 2px;
     font-size: 12px;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: rgba(240,236,228,0.9);
+    letter-spacing: 0.2px;
+}
+
+.movie-card-subtitle {
+    padding: 0 12px 10px;
+    font-size: 11px;
+    color: var(--muted);
     font-weight: 400;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+.movie-card-year {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: rgba(0,0,0,0.78);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    padding: 3px 8px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 600;
     color: rgba(240,236,228,0.85);
-    letter-spacing: 0.2px;
+    border: 1px solid rgba(255,255,255,0.12);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+    user-select: none;
+    pointer-events: none;
+    z-index: 1;
 }
 
 .movie-card-rating {
@@ -1524,10 +1656,13 @@ video { outline: none; }
         padding: 3px 8px;
         font-size: 10px;
     }
-    .search-box {
+    .search-box-wrapper {
         order: 4;
         width: 100%;
         margin: 4px 0 0;
+    }
+    .search-box-wrapper .search-box {
+        width: 100%;
     }
     .search-box input {
         width: 100%;
@@ -1585,13 +1720,24 @@ video { outline: none; }
     .movie-card-rating .rating-views {
         font-size: 9.5px;
     }
+    .movie-card-year {
+        top: 6px;
+        right: 6px;
+        padding: 2px 6px;
+        font-size: 10px;
+    }
     .hero-meta {
         margin-bottom: 12px;
         gap: 8px;
         font-size: 12px;
     }
     .movie-card-title {
-        font-size: 12px;
+        font-size: 11.5px;
+        padding: 8px 8px 1px;
+    }
+    .movie-card-subtitle {
+        padding: 0 8px 8px;
+        font-size: 10px;
     }
     .scroll-btn {
         display: none !important; /* На тач-экранах смахивают пальцем */

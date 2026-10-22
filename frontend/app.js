@@ -35,9 +35,7 @@ function scrollRow(rowId, direction) {
 document.addEventListener('DOMContentLoaded', () => {
     checkSystemStatus();
     loadCatalog();
-    document.getElementById('movieTitle').addEventListener('keypress', e => {
-        if (e.key === 'Enter') searchMovie();
-    });
+    setupSearchSuggestions();
 });
 
 // ─── Системный статус ────────────────────────────────────────────────────────
@@ -252,6 +250,7 @@ function renderRow(movies, rowId) {
         card.style.animationDelay = `${i * 0.04}s`;
         card.onclick = () => openMovieDetails(movie);
 
+        const year = movie.release_date ? movie.release_date.split('-')[0] : '';
         const cached = imdbStatsCache[movie.id];
         const ratingVal = (cached && cached.rating) ? cached.rating.toFixed(1) : (movie.vote_average ? movie.vote_average.toFixed(1) : '—');
         const votesVal = (cached && cached.votes > 0) ? cached.votes : (movie.vote_count || 0);
@@ -264,14 +263,19 @@ function renderRow(movies, rowId) {
             ? `<span class="rating-views" data-views-id="${movie.id}" title="${viewsTitle}">👁 ${viewsStr}</span>`
             : `<span class="rating-views" data-views-id="${movie.id}" style="display:none;"></span>`;
 
+        const yearBadgeHtml = year ? `<span class="movie-card-year">${year}</span>` : '';
+        const yearSubHtml = year ? `<div class="movie-card-subtitle">${year}</div>` : '';
+
         card.innerHTML = `
             <div class="movie-card-rating">
                 <span class="rating-val" data-rating-id="${movie.id}">★ ${ratingVal}</span>
                 ${viewsHtml}
             </div>
+            ${yearBadgeHtml}
             <img src="${TMDB_IMAGE_URL}${movie.poster_path}" alt="${escapeHtml(movie.title)}" loading="lazy">
             <div class="movie-card-overlay"><div class="movie-card-play">▶</div></div>
             <div class="movie-card-title">${escapeHtml(movie.title)}</div>
+            ${yearSubHtml}
         `;
         row.appendChild(card);
     });
@@ -386,6 +390,7 @@ function closeModal() {
 
 function showHomeScreen() {
     closeModal();
+    hideSuggestions();
     document.getElementById('movieTitle').value = '';
     document.getElementById('heroBanner').style.display = 'flex';
     document.querySelectorAll('.movie-section').forEach(s => s.style.display = 'block');
@@ -394,9 +399,186 @@ function showHomeScreen() {
     loadCatalog();
 }
 
-// ─── Поиск ───────────────────────────────────────────────────────────────────
+// ─── Поиск и поисковые подсказки ──────────────────────────────────────────────
+
+let searchDebounceTimer = null;
+let currentSearchReqId = 0;
+let currentSuggestions = [];
+let activeSuggestionIndex = -1;
+
+function setupSearchSuggestions() {
+    const input = document.getElementById('movieTitle');
+    const container = document.getElementById('searchSuggestions');
+    if (!input || !container) return;
+
+    input.addEventListener('input', e => {
+        const query = e.target.value.trim();
+        clearTimeout(searchDebounceTimer);
+        activeSuggestionIndex = -1;
+
+        if (query.length < 2) {
+            hideSuggestions();
+            return;
+        }
+
+        searchDebounceTimer = setTimeout(() => {
+            fetchSuggestions(query);
+        }, 220);
+    });
+
+    input.addEventListener('keydown', e => {
+        const container = document.getElementById('searchSuggestions');
+        const isShown = container && container.style.display !== 'none';
+
+        if (!isShown) {
+            if (e.key === 'Enter') {
+                hideSuggestions();
+                searchMovie();
+            }
+            return;
+        }
+
+        const items = container.querySelectorAll('.suggestion-item');
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            if (items.length > 0) {
+                activeSuggestionIndex = (activeSuggestionIndex + 1) % items.length;
+                updateActiveSuggestion(items);
+            }
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            if (items.length > 0) {
+                activeSuggestionIndex = (activeSuggestionIndex - 1 + items.length) % items.length;
+                updateActiveSuggestion(items);
+            }
+        } else if (e.key === 'Enter') {
+            e.preventDefault();
+            if (activeSuggestionIndex >= 0 && activeSuggestionIndex < currentSuggestions.length) {
+                const selectedMovie = currentSuggestions[activeSuggestionIndex];
+                hideSuggestions();
+                openMovieDetails(selectedMovie);
+            } else {
+                hideSuggestions();
+                searchMovie();
+            }
+        } else if (e.key === 'Escape') {
+            hideSuggestions();
+        }
+    });
+
+    input.addEventListener('focus', () => {
+        const query = input.value.trim();
+        if (query.length >= 2 && currentSuggestions.length > 0) {
+            container.style.display = 'block';
+        }
+    });
+
+    document.addEventListener('click', e => {
+        if (!e.target.closest('.search-box-wrapper')) {
+            hideSuggestions();
+        }
+    });
+}
+
+function updateActiveSuggestion(items) {
+    items.forEach((item, idx) => {
+        if (idx === activeSuggestionIndex) {
+            item.classList.add('active');
+            item.scrollIntoView({ block: 'nearest' });
+        } else {
+            item.classList.remove('active');
+        }
+    });
+}
+
+async function fetchSuggestions(query) {
+    const reqId = ++currentSearchReqId;
+    const container = document.getElementById('searchSuggestions');
+    if (!container) return;
+
+    try {
+        const res = await fetch(`${TMDB_BASE_URL}/search/movie?api_key=${TMDB_API_KEY}&language=ru&query=${encodeURIComponent(query)}`);
+        if (!res.ok || reqId !== currentSearchReqId) return;
+        const data = await res.json();
+        if (reqId !== currentSearchReqId) return;
+
+        const results = (data.results || []).slice(0, 6);
+        currentSuggestions = results;
+        activeSuggestionIndex = -1;
+
+        if (results.length === 0) {
+            container.innerHTML = `<div class="suggestion-empty">Фильмы не найдены</div>`;
+            container.style.display = 'block';
+            return;
+        }
+
+        let html = '';
+        results.forEach((movie, idx) => {
+            const year = movie.release_date ? movie.release_date.split('-')[0] : '';
+            const rating = movie.vote_average ? `★ ${movie.vote_average.toFixed(1)}` : '';
+            const poster = movie.poster_path ? `${TMDB_IMAGE_URL}${movie.poster_path}` : '';
+            const posterHtml = poster 
+                ? `<img src="${poster}" class="suggestion-poster" alt="" loading="lazy">` 
+                : `<div class="suggestion-poster suggestion-poster-placeholder">🎬</div>`;
+
+            html += `
+                <div class="suggestion-item" data-index="${idx}">
+                    ${posterHtml}
+                    <div class="suggestion-info">
+                        <div class="suggestion-title">${escapeHtml(movie.title)}</div>
+                        <div class="suggestion-meta">
+                            ${year ? `<span class="suggestion-year">${year}</span>` : ''}
+                            ${rating ? `<span class="suggestion-rating">${rating}</span>` : ''}
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+
+        html += `
+            <div class="suggestion-all-btn" id="btnSuggestionAll">
+                <span>Искать все раздачи по «${escapeHtml(query)}»</span>
+                <span>➔</span>
+            </div>
+        `;
+
+        container.innerHTML = html;
+        container.style.display = 'block';
+
+        // Клик по карточке в подсказках
+        container.querySelectorAll('.suggestion-item').forEach(el => {
+            el.addEventListener('click', () => {
+                const idx = parseInt(el.getAttribute('data-index'), 10);
+                if (currentSuggestions[idx]) {
+                    const chosen = currentSuggestions[idx];
+                    hideSuggestions();
+                    openMovieDetails(chosen);
+                }
+            });
+        });
+
+        const allBtn = document.getElementById('btnSuggestionAll');
+        if (allBtn) {
+            allBtn.addEventListener('click', () => {
+                hideSuggestions();
+                searchMovie();
+            });
+        }
+    } catch (e) {
+        console.warn('[Suggestions] Ошибка получения подсказок:', e);
+    }
+}
+
+function hideSuggestions() {
+    const container = document.getElementById('searchSuggestions');
+    if (container) {
+        container.style.display = 'none';
+    }
+    activeSuggestionIndex = -1;
+}
 
 async function searchMovie() {
+    hideSuggestions();
     const query = document.getElementById('movieTitle').value.trim();
     if (!query) return;
 
